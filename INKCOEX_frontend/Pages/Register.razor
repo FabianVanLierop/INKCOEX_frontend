@@ -1,0 +1,66 @@
+﻿@page "/register"
+@using INKCOEX_frontend.Model.Auth
+@inject HttpClient Client
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="d-flex justify-content-center align-items-center">
+    <div class="card shadow p-4" style="width: 100%; max-width: 400px;">
+        <h3 class="text-center">Register</h3>
+        <form>
+            <div data-mdb-input-init class="form-outline mb-4">
+                <label class="form-label" for="usernameForm">Username</label>
+                <input id="usernameForm" @bind="_username" class="form-control" />
+            </div>
+
+            <div data-mdb-input-init class="form-outline mb-4">
+                <label class="form-label" for="passwordForm">Password</label>
+                <input type="password" id="passwordForm" class="form-control" @bind="_password" />
+            </div>
+            
+            <div data-mdb-input-init class="form-outline mb-4">
+                <label class="form-label" for="repeatPasswordForm">Repeat Password</label>
+                <input type="password" id="repeatPasswordForm" class="form-control" @bind="_repeatPassword" />
+            </div>
+
+            <button type="button" data-mdb-button-init data-mdb-ripple-init class="btn btn-primary btn-block mb-4 w-100" @onclick="RegisterAccount">
+                Sign in
+            </button>
+
+            <div class="text-center">
+                <p>No account? <a href="register">Register</a></p>
+            </div>
+        </form>
+    </div>
+</div>
+
+@code {
+    private string? _username;
+    private string? _password;
+    private string? _repeatPassword;
+    private string? _errorMessage;
+
+    private async Task RegisterAccount()
+    {
+        _errorMessage = string.Empty;
+
+        if (_password != _repeatPassword)
+        {
+            _errorMessage = "Passwords don't match";
+            return;
+        }
+
+        var response = await Client.PostAsJsonAsync("auth/register", new  { Username = _username, Password = _password});
+
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<AuthResponse>();
+            await JS.InvokeVoidAsync("localStorage.setItem", "authToken", result?.Token);
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            _errorMessage = "Invalid login";
+        }
+    }
+}

@@ -1,0 +1,41 @@
+﻿@page "/"
+@using System.Diagnostics
+@using INKCOEX_frontend.Model.Sets
+@inject HttpClient Client
+
+
+<PageTitle>SetDetails</PageTitle>
+
+@if (_sets == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="container mt-4">
+        <div class="row row-cols-1 row-cols-md-3 g-4">
+            @foreach (var set in _sets)
+            {
+                <NavLink href="@($"/sets/{set.Id}")">
+                    <div class="col">
+                        <div class="card h-100">
+                            <img src="data:image/png;base64,@set.ImageData" />
+                            <div class="card-body">
+                                <h5 class="card-title">@set.Name</h5>
+                            </div>
+                        </div>
+                    </div>
+                </NavLink>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<Model.Sets.Set>? _sets;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sets = await Client.GetFromJsonAsync<List<Model.Sets.Set>>("collections/sets");
+    }
+}
