@@ -13,8 +13,4 @@
     <PackageReference Include="System.Text.Json" Version="9.0.10" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Model\Sets\" />
-  </ItemGroup>
-
 </Project>

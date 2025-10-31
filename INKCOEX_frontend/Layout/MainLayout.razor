@@ -13,8 +13,13 @@
         <div class="top-row px-4">
             <AuthorizeView>
                 <Authorized>
+                    @if (context.User.IsInRole("admin"))
+                    {
+                        <a class="btn btn-outline-secondary me-2" href="/portal/manage/sets">Portal</a>
+                    }
                     <button class="btn btn-outline-primary" @onclick="Logout">Logout</button>
                 </Authorized>
+
                 <NotAuthorized>
                     <a class="btn btn-outline-primary" href="login">Login</a>
                 </NotAuthorized>

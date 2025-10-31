@@ -1,0 +1,99 @@
+﻿@page "/cards"
+@using INKCOEX_frontend.Model.Cards
+@using INKCOEX_frontend.Services
+@inject HttpClient Client
+@inject AuthService AuthService
+
+<h3 class="mb-3">All Cards</h3>
+
+<input class="form-control mb-3"
+       placeholder="Search cards by name..."
+       @bind="_searchQuery"
+       @bind:event="oninput" />
+
+@if (!_isLoaded)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <select class="form-select mb-3" @bind="_selectedRarity">
+        <option value="">All Rarities</option>
+        @foreach (var rarity in _cards.Select(c => c.Rarity).Distinct())
+        {
+            <option value="@rarity">@FormatRarity(rarity.ToString())</option>
+        }
+    </select>
+
+    @foreach (var group in FilteredCards.GroupBy(c => c.Rarity))
+    {
+        <div class="col-12 mt-3">
+            <h5 class="text-primary fw-bold border-bottom pb-1">
+                @FormatRarity(group.Key.ToString())
+            </h5>
+        </div>
+
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+            @foreach (var card in group)
+            {
+                <div class="col">
+                    <div class="card border-0 shadow-sm h-100 position-relative">
+
+                        <div class="card-body p-2 text-center small">
+                            <div class="fw-bold">#@card.Number - @card.Name</div>
+                        </div>
+
+                        <img src="data:image/png;base64,@card.ImageData"
+                             class="card-img-top" alt="@card.Name" />
+
+                        @if (card.Owned)
+                        {
+                            <div class="check-overlay">
+                                <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<Card> _cards = new();
+    private bool _isLoggedIn = false;
+    private bool _isLoaded = false;
+
+    private string _searchQuery = "";
+    private string _selectedRarity = "";
+
+    private IEnumerable<Card> FilteredCards =>
+        _cards.Where(c =>
+            (string.IsNullOrWhiteSpace(_searchQuery) ||
+             c.Name.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+            &&
+            (string.IsNullOrWhiteSpace(_selectedRarity) ||
+             c.Rarity.ToString() == _selectedRarity)
+        );
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoggedIn = await AuthService.IsLoggedInAsync();
+        if (_isLoggedIn)
+            Client.DefaultRequestHeaders.Authorization = await AuthService.CreateAuthHeader();
+
+        var response = await Client.GetFromJsonAsync<List<Card>>("collections/cards");
+        _cards = response ?? new();
+
+        _isLoaded = true;
+    }
+
+    private string FormatRarity(string rarity) => rarity switch
+    {
+        "DoubleRare" => "Double Rare",
+        "IllustrationRare" => "Illustration Rare",
+        "SpecialIllustrationRare" => "Special Illustration Rare",
+        "HyperRare" => "Hyper Rare",
+        _ => rarity
+    };
+}

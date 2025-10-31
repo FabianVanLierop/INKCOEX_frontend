@@ -1,0 +1,198 @@
+﻿@page "/portal/manage/sets/{SetId:int}/cards"
+
+@using INKCOEX_frontend.Model.Cards
+@using INKCOEX_frontend.Model.Sets
+@using INKCOEX_frontend.Services
+@using Microsoft.AspNetCore.Authorization
+@inject HttpClient Client
+@inject IJSRuntime JS
+@inject AuthService AuthService
+@attribute [Authorize(Roles = "admin")]
+
+
+<h3>Manage Cards for Set @_setName</h3>
+
+<button class="btn btn-primary mb-3" @onclick="ShowCreateForm">Add Card</button>
+
+@if (_showCreateForm)
+{
+    <div class="card p-3 mb-4">
+        <h4>@(_editingCard != null ? "Edit Card" : "Add Card")</h4>
+
+        <EditForm Model="@_newCard" OnValidSubmit="@SaveCard">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-2">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="_newCard.Name" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Number</label>
+                <InputNumber class="form-control" @bind-Value="_newCard.Number" />
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Rarity</label>
+                <InputSelect class="form-control" @bind-Value="_newCard.Rarity">
+                    <option value="">-- Select Rarity --</option>
+                    @foreach (var rarity in Enum.GetValues<Rarity>())
+                    {
+                        <option value="@rarity">@rarity</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label">Card Image</label>
+                <InputFile OnChange="OnImageUpload" accept="image/*" />
+                @if (!string.IsNullOrEmpty(_imagePreview))
+                {
+                    <div class="mt-2">
+                        <img src="@_imagePreview" alt="Preview" style="max-height:150px; border:1px solid #ccc;" />
+                    </div>
+                }
+            </div>
+
+            <button type="submit" class="btn btn-success me-2">
+                @(_editingCard != null ? "Update" : "Create")
+            </button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelForm">Cancel</button>
+        </EditForm>
+    </div>
+}
+
+@if (_cards == null)
+{
+    <p><em>Loading cards...</em></p>
+}
+else if (_cards.Count == 0)
+{
+    <p>No cards in this set yet.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Rarity</th>
+                <th style="width:150px">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var card in _cards.OrderBy(x => x.Number))
+            {
+                <tr>
+                    <td>@card.Number</td>
+                    <td>@card.Name</td>
+                    <td>@card.Rarity</td>
+                    <td>
+                        <button class="btn btn-sm btn-info me-2" @onclick="() => EditCard(card)">Edit</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteCard(card.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public int SetId { get; set; }
+
+    private List<Card>? _cards;
+    private string? _setName;
+    private bool _showCreateForm = false;
+    private Card? _editingCard;
+    private Card _newCard = new();
+    private string? _imagePreview;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Client.DefaultRequestHeaders.Authorization = await AuthService.CreateAuthHeader();
+        await LoadCards();
+    }
+
+    private async Task LoadCards()
+    {
+        _cards = await Client.GetFromJsonAsync<List<Card>>($"collections/sets/{SetId}/cards");
+        var set = await Client.GetFromJsonAsync<Set>($"collections/sets/{SetId}");
+        _setName = set?.Name;
+    }
+
+    private void ShowCreateForm()
+    {
+        _newCard = new Card { SetId = SetId };
+        _editingCard = null;
+        _imagePreview = null;
+        _showCreateForm = true;
+    }
+
+    private void EditCard(Card card)
+    {
+        _editingCard = card;
+        _newCard = new Card
+            {
+                Id = card.Id,
+                Name = card.Name,
+                Number = card.Number,
+                Rarity = card.Rarity,
+                ImageData = card.ImageData,
+                SetId = SetId
+            };
+        _imagePreview = card.ImageData != null ? $"data:image/png;base64,{card.ImageData}" : null;
+        _showCreateForm = true;
+    }
+
+    private async Task SaveCard()
+    {
+        HttpResponseMessage response;
+
+        if (_editingCard == null)
+        {
+            response = await Client.PostAsJsonAsync($"collections/sets/{SetId}/cards", new[] { _newCard });
+        }
+        else
+        {
+            response = await Client.PutAsJsonAsync($"collections/cards/{_newCard.Id}", _newCard);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadCards();
+            _showCreateForm = false;
+        }
+    }
+
+    private async Task DeleteCard(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this card?")) return;
+
+        var response = await Client.DeleteAsync($"collections/cards/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            _cards?.RemoveAll(c => c.Id == id);
+            StateHasChanged();
+        }
+    }
+
+    private void CancelForm()
+    {
+        _showCreateForm = false;
+        _editingCard = null;
+    }
+
+    private async Task OnImageUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        await using var stream = file.OpenReadStream(5 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+
+        var bytes = ms.ToArray();
+        _newCard.ImageData = Convert.ToBase64String(bytes);
+        _imagePreview = $"data:image/png;base64,{_newCard.ImageData}";
+    }
+}

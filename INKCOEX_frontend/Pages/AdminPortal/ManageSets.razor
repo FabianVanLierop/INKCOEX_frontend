@@ -1,0 +1,164 @@
+﻿@page "/portal/manage/sets"
+@using INKCOEX_frontend.Model.Sets
+@using INKCOEX_frontend.Services
+@using Microsoft.AspNetCore.Authorization
+@inject HttpClient Client
+@inject IJSRuntime JS
+@inject AuthService AuthService
+@attribute [Authorize(Roles = "admin")]
+
+<h3>Manage Sets</h3>
+
+<button class="btn btn-primary mb-3" @onclick="ShowCreateForm">Create New Set</button>
+
+@if (_showCreateForm)
+{
+    <div class="card p-3 mb-4">
+        <h4>@(_editingSet != null ? "Edit Set" : "Create New Set")</h4>
+        <EditForm Model="@_newSet" OnValidSubmit="@SaveSet">
+            <div class="mb-2">
+                <label class="form-label">Name</label>
+                <InputText class="form-control" @bind-Value="_newSet.Name" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Code</label>
+                <InputText class="form-control" @bind-Value="_newSet.Code" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Release Date</label>
+                <InputDate class="form-control" @bind-Value="_newSet.ReleaseDate" />
+            </div>
+            <button type="submit" class="btn btn-success me-2">
+                @(_editingSet != null ? "Update" : "Create")
+            </button>
+            <button type="button" class="btn btn-secondary" @onclick="CancelForm">Cancel</button>
+        </EditForm>
+    </div>
+}
+
+@if (_sets == null)
+{
+    <p><em>Loading sets...</em></p>
+}
+else if (_sets.Count == 0)
+{
+    <p>No sets found.</p>
+}
+else
+{
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Code</th>
+            <th>Release Date</th>
+            <th style="width: 220px;">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var set in _sets)
+        {
+            <tr>
+                <td>@set.Name</td>
+                <td>@set.Code</td>
+                <td>@set.ReleaseDate.ToShortDateString()</td>
+                <td>
+                    <button class="btn btn-sm btn-info me-2" @onclick="() => EditSet(set)">Edit</button>
+                    <button class="btn btn-sm btn-danger me-2" @onclick="() => DeleteSet(set.Id)">Delete</button>
+                    <button class="btn btn-sm btn-secondary" @onclick="() => ManageCards(set.Id)">Cards</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Set>? _sets;
+    private bool _showCreateForm = false;
+    private Set? _editingSet;
+
+    private CreateSetRequest _newSet = new() { ReleaseDate = DateTime.Today};
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSets();
+        Client.DefaultRequestHeaders.Authorization = await AuthService.CreateAuthHeader();
+    }
+
+    private async Task LoadSets()
+    {
+        _sets = await Client.GetFromJsonAsync<List<Set>>("collections/sets");
+    }
+
+    private void ShowCreateForm()
+    {
+        _newSet = new() { ReleaseDate = DateTime.Today};
+        _editingSet = null;
+        _showCreateForm = true;
+    }
+
+    private void EditSet(Set set)
+    {
+        _editingSet = set;
+        _newSet = new CreateSetRequest
+            {
+                Name = set.Name,
+                Code = set.Code,
+                ReleaseDate = set.ReleaseDate
+            };
+        _showCreateForm = true;
+    }
+
+    private async Task SaveSet()
+    {
+        if (_editingSet == null)
+        {
+            var response = await Client.PostAsJsonAsync("collections/sets", _newSet);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadSets();
+                _showCreateForm = false;
+            }
+        }
+        else
+        {
+            var response = await Client.PutAsJsonAsync($"collections/sets/{_editingSet.Id}", _newSet);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadSets();
+                _showCreateForm = false;
+            }
+        }
+    }
+
+    private async Task DeleteSet(int id)
+    {
+        if (!await Confirm($"Are you sure you want to delete this set?")) return;
+
+        var response = await Client.DeleteAsync($"collections/sets/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            _sets?.RemoveAll(s => s.Id == id);
+            StateHasChanged();
+        }
+    }
+
+    private void CancelForm()
+    {
+        _showCreateForm = false;
+        _editingSet = null;
+    }
+
+    private void ManageCards(int setId)
+    {
+        NavigationManager.NavigateTo($"portal/manage/sets/{setId}/cards");
+    }
+
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+
+    private async Task<bool> Confirm(string message)
+    {
+        return await JS.InvokeAsync<bool>("confirm", message);
+    }
+}
